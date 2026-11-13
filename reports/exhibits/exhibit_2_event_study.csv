@@ -1,0 +1,3 @@
+window,n,mean %,usual 7-day mean %,share up,t,p
+7 days before spike,24,1.027,0.488,0.667,0.896,0.379
+7 days after spike,24,-0.054,0.488,0.458,-1.001,0.327

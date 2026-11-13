@@ -1,0 +1,73 @@
+name: Backfill hourly XAU/USD prices
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start date (ISO, e.g. 2026-09-03)"
+        required: true
+      end:
+        description: "End date (ISO) or 'now'"
+        required: false
+        default: "now"
+      prune_closed:
+        description: "Delete stored hours with no bar (market closed)"
+        type: boolean
+        required: false
+        default: true
+      dry_run:
+        description: "Fetch without storing"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  # Shared with collect.yml, price.yml and backfill.yml: all write
+  # data/goldpulse.sqlite3 and push to main.
+  group: goldpulse-db
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run price backfill
+        # Inputs go through env, never interpolated into the script directly.
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+          PRUNE: ${{ inputs.prune_closed }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          args=(--start "$START" --end "$END")
+          if [ "$PRUNE" = "true" ]; then args+=(--prune-closed); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          python backfill_price.py "${args[@]}"
+
+      - name: Commit backfilled prices, if any
+        if: ${{ inputs.dry_run != true }}
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          git config user.name "goldpulse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/goldpulse.sqlite3
+          git diff --cached --quiet && exit 0
+          git commit -m "backfill prices: $START to $END"
+          git pull --rebase origin main
+          git push

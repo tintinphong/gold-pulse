@@ -1,0 +1,10 @@
+# For notebooks/ only. Kept out of requirements.txt so the 15-minute
+# collector job doesn't install Jupyter on every run.
+-r requirements.txt
+nbformat
+nbclient
+ipykernel
+matplotlib
+scikit-learn
+seaborn
+statsmodels

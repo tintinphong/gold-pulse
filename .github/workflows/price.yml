@@ -1,0 +1,42 @@
+name: Sync XAU/USD prices (manual)
+
+# No schedule: the price sync ran every 15 minutes inside collect.yml. A
+# separate hourly cron here shared the goldpulse-db concurrency group with
+# collect.yml and kept getting cancelled while pending. Kept for manual runs.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  # Shared with collect.yml: both write data/goldpulse.sqlite3 and push to main.
+  group: goldpulse-db
+  cancel-in-progress: false
+
+jobs:
+  price:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Sync recent hourly XAU/USD bars
+        run: python run_price_once.py
+
+      - name: Commit new prices, if any
+        run: |
+          git config user.name "goldpulse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/goldpulse.sqlite3
+          git diff --cached --quiet && exit 0
+          git commit -m "price: $(date -u +%FT%TZ)"
+          git pull --rebase origin main
+          git push

@@ -1,0 +1,80 @@
+name: Backfill posts from Arctic Shift
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "Start date (ISO, e.g. 2026-09-08)"
+        required: true
+      end:
+        description: "End date (ISO) or 'now'"
+        required: false
+        default: "now"
+      subreddits:
+        description: "Space-separated; blank means the configured set"
+        required: false
+        default: ""
+      dry_run:
+        description: "Fetch and score without storing"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  # Shared with collect.yml and price.yml: all three write the same
+  # data/goldpulse.sqlite3 file and push to main.
+  group: goldpulse-db
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run backfill
+        # Inputs go through env, never interpolated into the script directly,
+        # so a crafted input value can't break out into the shell.
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+          SUBREDDITS: ${{ inputs.subreddits }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          args=(--start "$START" --end "$END")
+          if [ -n "$SUBREDDITS" ]; then
+            read -ra extra <<< "$SUBREDDITS"
+            args+=(--subreddits "${extra[@]}")
+          fi
+          if [ "$DRY_RUN" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          python backfill.py "${args[@]}"
+
+      - name: Commit backfilled posts, if any
+        # always(), so a backfill that times out or dies partway still commits
+        # the rows it did insert instead of throwing them away with the runner.
+        if: ${{ always() && inputs.dry_run != true }}
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          git config user.name "goldpulse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/goldpulse.sqlite3
+          git diff --cached --quiet && exit 0
+          git commit -m "backfill: $START to $END"
+          git pull --rebase origin main
+          git push

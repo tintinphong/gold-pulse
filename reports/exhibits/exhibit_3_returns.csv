@@ -1,0 +1,6 @@
+rule,n days,mean (bp),std (bp),skew,kurtosis,p (mean = 0),annualised Sharpe,p (vs buy and hold)
+buy and hold (every day),1206,6.9033,118.2718,-0.5926,5.388,0.0429,0.9266,
+"follow the mood: long if warm, short if cool",1206,0.5355,118.472,0.3531,5.2077,0.8753,0.0717,0.2255
+long only on warm-mood days,639,7.0197,103.6185,-0.2722,1.751,0.0873,1.0754,0.9826
+after an attention spike (next day),61,3.1062,196.1422,-1.9639,7.9975,0.902,0.2514,0.8814
+previous: the spike day itself,61,17.4271,188.9777,-2.1421,9.6867,0.4742,1.4639,

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environments and secrets
+.env
+.env.*
+!.env.example
+venv/
+.venv/
+
+# Editors and OS
+.idea/
+.vscode/
+.claude/
+.DS_Store
+Thumbs.db
+~$*
+
+# Runtime output
+logs/
+
+# Licensed or third-party material that is used locally but not redistributed
+data/bbg/
+extra_BBL/
+*.pdf
+*.docx
+*.pptx
+
+# Resumable backfill parts (the combined history_posts.parquet is committed)
+data/clean/history/*.parquet
+data/clean/history/*.tmp

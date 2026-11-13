@@ -1,0 +1,53 @@
+name: Collect Reddit posts (Arctic Shift)
+
+# Ran every 15 minutes during live collection (8 Sep - 5 Oct 2026). The
+# schedule was removed when the project ended; run it by hand from the
+# Actions tab if needed.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  # Shared with every workflow that writes data/goldpulse.sqlite3 and pushes to
+  # main. GitHub keeps only ONE pending run per group and cancels the older
+  # pending one when a new run queues -- which is how the old hourly price.yml
+  # lost ~80% of its runs to this 15-minute job. So the price sync now runs
+  # inside this job instead of as a competing schedule.
+  group: goldpulse-db
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Poll Arctic Shift once
+        run: python run_collect_once.py
+
+      # Re-syncs the last few days of hourly GC=F bars, so any run that lands
+      # fills every hour missed since the last one. A Yahoo hiccup must not
+      # cost us the posts collected above, hence continue-on-error.
+      - name: Sync hourly XAU/USD prices
+        continue-on-error: true
+        run: python run_price_once.py
+
+      - name: Commit new posts and prices, if any
+        run: |
+          git config user.name "goldpulse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/goldpulse.sqlite3
+          git diff --cached --quiet && exit 0
+          git commit -m "collect: $(date -u +%FT%TZ)"
+          git pull --rebase origin main
+          git push

@@ -1,0 +1,6 @@
+# For sentiment/finbert.py only (one-off scoring run on a laptop). Kept out of
+# requirements.txt so the 15-minute collector job never installs torch.
+# CPU build is enough:  pip install torch --index-url https://download.pytorch.org/whl/cpu
+-r requirements.txt
+torch
+transformers>=4.40

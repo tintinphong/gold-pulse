@@ -1,0 +1,7 @@
+requests>=2.31,<3
+vaderSentiment>=3.3,<4
+langdetect>=1.0,<2
+python-dotenv>=1.0,<2
+yfinance>=0.2,<0.3
+pandas>=2.0
+pyarrow>=15

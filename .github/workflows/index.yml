@@ -1,0 +1,57 @@
+name: Rebuild GoldPulse Index (daily)
+
+# Closes the loop from the product back to new data: while live collection ran,
+# the collector added posts to data/goldpulse.sqlite3 every 15 minutes and this
+# job folded them, plus the latest daily GC=F closes, into the published index
+# that the dashboard reads. It ran daily at 00:30 UTC until the project ended;
+# the schedule is now removed, so run it by hand from the Actions tab.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  # Same group as collect.yml: both commit to main, so they must not race.
+  group: goldpulse-db
+  cancel-in-progress: false
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - run: pip install -r requirements.txt
+
+      - name: Rebuild the index from all posts and fresh daily prices
+        run: python -m processing.index --refresh-prices
+
+      # While collection ran, this step failed the job if the newest day was more
+      # than 3 days old. Collection ended on 5 Oct 2026, so it now only reports.
+      - name: Report the newest published day
+        run: |
+          python - <<'EOF'
+          import pandas as pd
+          idx = pd.read_parquet("data/clean/goldpulse_index.parquet").dropna(subset=["attention_score"])
+          age = (pd.Timestamp.now(tz="UTC").tz_localize(None).normalize() - idx.index.max()).days
+          print(f"latest published day {idx.index.max():%Y-%m-%d} ({age} days old)")
+          EOF
+
+      - name: Commit the refreshed index, if it changed
+        if: always()
+        run: |
+          git config user.name "goldpulse-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/clean/goldpulse_index.parquet data/clean/gold_daily_yahoo.parquet
+          git diff --cached --quiet && exit 0
+          git commit -m "index: $(date -u +%F)"
+          git pull --rebase origin main
+          git push
